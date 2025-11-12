@@ -1,36 +1,37 @@
-#include <Arduino.h> 
+#include <Arduino.h>
 
-int Trig = 2; 
-int Echo = 3; 
-int CM; 
-long TIME; 
+int Trig = 2;
+int Echo = 3;
+int CM;
+long TIME;
 
-void setup() 
-{ 
-  Serial.begin(9600); 
-  pinMode(Trig, OUTPUT); 
-  pinMode(Echo, INPUT); 
+void pomiar_odleglosci ()
+{
+  digitalWrite(Trig, LOW);
+  delayMicroseconds(2);
+  digitalWrite(Trig, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(Trig, LOW);
+  digitalWrite(Echo, HIGH);
+  TIME = pulseIn(Echo, HIGH);
+  CM = TIME / 58;
+}
 
-  Serial.println("Test of spacing"); 
-} 
+void setup()
+{
+  Serial.begin(9600);
+  pinMode(Trig, OUTPUT);
+  pinMode(Echo, INPUT);
 
-void loop() 
-{ 
-  pomiar_odleglosci(); 
-  Serial.print("Distance: "); 
-  Serial.print(CM); 
-  Serial.println(" cm"); 
-  delay(200); 
-} 
+  Serial.println("Test of spacing");
+}
 
-void pomiar_odleglosci () 
-{ 
-  digitalWrite(Trig, LOW); 
-  delayMicroseconds(2); 
-  digitalWrite(Trig, HIGH); 
-  delayMicroseconds(10); 
-  digitalWrite(Trig, LOW); 
-  digitalWrite(Echo, HIGH); 
-  TIME = pulseIn(Echo, HIGH); 
-  CM = TIME / 58; 
-} 
+void loop()
+{
+  pomiar_odleglosci();
+  Serial.print("Distance: ");
+  Serial.print(CM);
+  Serial.println(" cm");
+  delay(200);
+}
+
