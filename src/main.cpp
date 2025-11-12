@@ -1,18 +1,36 @@
-#include <Arduino.h>
+#include <Arduino.h> 
 
-// put function declarations here:
-int myFunction(int, int);
+int Trig = 2; 
+int Echo = 3; 
+int CM; 
+long TIME; 
 
-void setup() {
-  // put your setup code here, to run once:
-  int result = myFunction(2, 3);
-}
+void setup() 
+{ 
+  Serial.begin(9600); 
+  pinMode(Trig, OUTPUT); 
+  pinMode(Echo, INPUT); 
 
-void loop() {
-  // put your main code here, to run repeatedly:
-}
+  Serial.println("Test of spacing"); 
+} 
 
-// put function definitions here:
-int myFunction(int x, int y) {
-  return x + y;
-}
+void loop() 
+{ 
+  pomiar_odleglosci(); 
+  Serial.print("Distance: "); 
+  Serial.print(CM); 
+  Serial.println(" cm"); 
+  delay(200); 
+} 
+
+void pomiar_odleglosci () 
+{ 
+  digitalWrite(Trig, LOW); 
+  delayMicroseconds(2); 
+  digitalWrite(Trig, HIGH); 
+  delayMicroseconds(10); 
+  digitalWrite(Trig, LOW); 
+  digitalWrite(Echo, HIGH); 
+  TIME = pulseIn(Echo, HIGH); 
+  CM = TIME / 58; 
+} 
