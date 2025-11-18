@@ -16,6 +16,7 @@ class StepperMotor{
         }
         void init(const float maxSpeed, const float acceleration);
         void moveStepperToSample(const int index);
-        float getStepAngle() const;;
+        float getStepAngle() const;
+        void changeResolution(uint16_t resolution);
 
 };
