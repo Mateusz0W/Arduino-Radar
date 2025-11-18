@@ -16,3 +16,7 @@ void StepperMotor::moveStepperToSample(const int index){
 float StepperMotor::getStepAngle() const{
     return _stepAngle;
 }
+
+void StepperMotor::changeResolution(uint16_t resolution){
+    _stepsPerSample = resolution * (_stepAngle / 360.0f);
+}
