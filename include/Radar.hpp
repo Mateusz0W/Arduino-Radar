@@ -16,7 +16,7 @@ class Radar{
         int _resolution;
 
     public:
-        Radar(StepperMotor &motor, Sensor &sensor, float maxAngle = 180.0f, int resolution = 0): _motor(motor), _sensor(sensor), _maxAngle(maxAngle), _resolution(resolution){
+        Radar(StepperMotor &motor, Sensor &sensor, float maxAngle = 45.0f, int resolution = 0): _motor(motor), _sensor(sensor), _maxAngle(maxAngle), _resolution(resolution){
         if (resolution > 0)
             _sampleCount = resolution + 1;
         else

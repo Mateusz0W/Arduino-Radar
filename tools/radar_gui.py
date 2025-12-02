@@ -31,7 +31,10 @@ class SerialRadarClient:
         self.ser: serial.Serial | None = None
         self.read_thread: threading.Thread | None = None
         self.stop_event = threading.Event()
-        self.sweep_queue: queue.Queue[list[tuple[float, float]]] = queue.Queue()
+        # Queue holds individual points (angle, distance) and None for end-of-sweep
+        self.sweep_queue: queue.Queue[tuple[float, float] | None] = queue.Queue()
+        # Pending config to apply after current sweep ends
+        self._pending_cfg: ScanConfig | None = None
 
     def connect(self, port: str, baud: int = 115200, timeout: float = 1.0):
         if self.ser and self.ser.is_open:
@@ -53,6 +56,9 @@ class SerialRadarClient:
             except Exception:
                 pass
             self.ser = None
+        
+        if hasattr(self, "_pending_cfg"):
+            self._pending_cfg = None
 
     def is_connected(self) -> bool:
         return bool(self.ser and self.ser.is_open)
@@ -61,11 +67,14 @@ class SerialRadarClient:
         if not self.is_connected():
             return
         logging.info(f"Sending command: {line.strip()}")
-        self.ser.write((line.strip() + "\n").encode("utf-8"))
+        try:
+            self.ser.write((line.strip() + "\n").encode("utf-8"))
+        except Exception as e:
+            logging.error(f"Serial write failed: {e}")
 
     def apply_config(self, cfg: ScanConfig):
-        # Optional: firmware may ignore; send a concise string
-        self.send_line(f"Resolution: {int(cfg.resolution)}, Angle: {int(cfg.angle)}")
+        # Buffer config; will be sent at end-of-sweep (when END arrives)
+        self._pending_cfg = cfg
 
     def start_auto(self, enabled: bool = True):
         # Deprecated in this GUI revision
@@ -76,7 +85,6 @@ class SerialRadarClient:
         pass
 
     def _reader_loop(self):
-        buf: list[tuple[float, float]] = []
         ser = self.ser
         assert ser is not None
         while not self.stop_event.is_set():
@@ -86,29 +94,40 @@ class SerialRadarClient:
                 break
             if not raw:
                 continue
+            logging.debug(f"Serial raw: {raw}")
             if raw == "END":
-                if buf:
-                    self.sweep_queue.put(buf)
-                    buf = []
+                self.sweep_queue.put(None)
+                if self._pending_cfg is not None:
+                    try:
+                        res = int(self._pending_cfg.resolution)
+                        ang = int(self._pending_cfg.angle)
+                        self.send_line(f"Resolution: {res}, Angle: {ang}")
+                    except Exception:
+                        pass
+                    finally:
+                        self._pending_cfg = None
                 continue
-            # Accept JSON {"Angle": ..., "Distance": ...} or CSV "angle,distance"
             try:
                 if raw.startswith("{"):
                     import json
                     obj = json.loads(raw)
-                    a = obj.get("Angle")
-                    d = obj.get("Distance")
+                    a = obj.get("Angle", obj.get("angle"))
+                    d = obj.get("Distance", obj.get("distance"))
                     if a is None or d is None:
                         raise ValueError()
-                    buf.append((float(a), float(d)))
+                    logging.info(f"Serial parsed -> angle={a}, distance={d}")
+                    self.sweep_queue.put((float(a), float(d)))
                 else:
                     angle_str, dist_str = raw.split(",")
                     a = float(angle_str)
                     d = float(dist_str)
-                    buf.append((a, d))
+                    logging.info(f"Serial parsed -> angle={a}, distance={d}")
+                    self.sweep_queue.put((a, d))
             except Exception:
                 # Ignore malformed lines
                 continue
+
+    # No simulator loop; always read from serial
 
 
 class RadarGUI:
@@ -123,6 +142,9 @@ class RadarGUI:
         self.resolution = tk.IntVar(value=int(self.cfg.resolution))
         self.angle = tk.IntVar(value=int(self.cfg.angle))
 
+        # Buffers for current sweep
+        self._current_angles: list[float] = []
+        self._current_dists: list[float] = []
         self._build_ui()
         self._schedule_update()
 
@@ -145,8 +167,7 @@ class RadarGUI:
 
         self.connect_btn = ttk.Button(top, text="Connect", command=self._toggle_connect)
         self.connect_btn.grid(row=0, column=5, padx=(12, 4))
-
-        # Removed firmware-only controls for simplicity
+        # Simulation option removed; always listen to serial
 
         # Config controls
         cfg = ttk.LabelFrame(self.root, text="Scan Config")
@@ -171,18 +192,9 @@ class RadarGUI:
         plot_frame = ttk.Frame(self.root)
         plot_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=8, pady=8)
 
-        self.fig = Figure(figsize=(10, 4), dpi=100)
-        self.ax_polar = self.fig.add_subplot(121, projection="polar")
-        self.ax_cart = self.fig.add_subplot(122)
-        self.ax_cart.set_xlim(-200, 200)
-        self.ax_cart.set_ylim(0, 200)
-        self.ax_cart.set_aspect("equal")
-        self.ax_cart.set_xlabel("X (cm)")
-        self.ax_cart.set_ylabel("Y (cm)")
-        self.ax_cart.grid(True, linestyle=":", linewidth=0.5)
-
+        self.fig = Figure(figsize=(6, 6), dpi=100)
+        self.ax_polar = self.fig.add_subplot(111, projection="polar")
         self.polar_points, = self.ax_polar.plot([], [], "g.")
-        self.cart_points, = self.ax_cart.plot([], [], "g.")
 
         self.canvas = FigureCanvasTkAgg(self.fig, master=plot_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
@@ -217,9 +229,7 @@ class RadarGUI:
                 messagebox.showerror("Connection failed", str(e))
                 return
             self.connect_btn.config(text="Disconnect")
-            # Optionally send config to firmware
-            if self.controls_enabled.get():
-                self._apply_cfg()
+            # No automatic config apply on connect; user can press Apply
 
     def _apply_cfg(self):
         # Validate and apply Resolution and Angle
@@ -252,27 +262,30 @@ class RadarGUI:
 
     def _update_plots(self):
         updated = False
-        # Throttle drawing to display_rate_hz
+        
         min_interval = 1.0 / max(0.1, float(self.display_rate_hz.get()))
         now = time.time()
         while not self.client.sweep_queue.empty():
-            sweep = self.client.sweep_queue.get_nowait()
-            if not sweep:
+            item = self.client.sweep_queue.get_nowait()
+            if item is None:
+                
+                logging.info(f"Sweep complete: {len(self._current_angles)} points")
+                self._current_angles = []
+                self._current_dists = []
                 continue
-            angles_deg = np.array([a for a, _ in sweep])
-            dists = np.array([d for _, d in sweep])
-
-            # No start/end filtering; data shown as received
-            # Convert to radians for polar
+            angle_deg, dist = item
+            
+            if self._current_angles and angle_deg < self._current_angles[-1]:
+                self._current_angles = []
+                self._current_dists = []
+            
+            self._current_angles.append(angle_deg)
+            self._current_dists.append(dist)
+            angles_deg = np.array(self._current_angles)
+            dists = np.array(self._current_dists)
             angles_rad = np.deg2rad(angles_deg)
             self.polar_points.set_data(angles_rad, dists)
-
-            # Cartesian projection (assuming sensor at origin facing +Y)
-            x = dists * np.sin(angles_rad)
-            y = dists * np.cos(angles_rad)
-            self.cart_points.set_data(x, y)
-
-            # Adjust radial max to data range
+            
             try:
                 rmax = float(np.nanmax(dists))
                 if math.isfinite(rmax) and rmax > 0:
