@@ -20,9 +20,12 @@ void Radar::scanSweep(bool forward){
 }
 
 void Radar::emitPoint(float angle, uint16_t distance) const{
-    Serial.print(angle, 1);
-    Serial.print(',');
-    Serial.println(distance);
+    JsonDocument doc;
+    doc["angle"] = angle;
+    doc["distance"] = distance;
+
+    serializeJson(doc, Serial);
+    Serial.println();
 }
 
 bool Radar::reciveData(){
