@@ -46,12 +46,10 @@ bool Radar::reciveData(){
 }
 
 void Radar::changeParameters(){
-    setResolution(10);
-    //setMaxAngle(90);
-    // if(reciveData()){
-    //     setResolution(_recivedResolution);
-    //     setMaxAngle(_recivedAngle);
-    // }
+    if(reciveData()){
+        setResolution(_recivedResolution);
+        setMaxAngle(_recivedAngle);
+    }
 }
 
 void Radar::setMaxAngle(float angle) {
