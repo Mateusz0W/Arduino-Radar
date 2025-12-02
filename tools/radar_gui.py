@@ -4,6 +4,7 @@ import time
 import math
 from dataclasses import dataclass
 import logging
+import json
 
 import numpy as np
 import serial
@@ -35,6 +36,8 @@ class SerialRadarClient:
         self.sweep_queue: queue.Queue[tuple[float, float] | None] = queue.Queue()
         # Pending config to apply after current sweep ends
         self._pending_cfg: ScanConfig | None = None
+        # Last known config; used to keep sweeps continuous
+        self._current_cfg: ScanConfig = ScanConfig()
 
     def connect(self, port: str, baud: int = 115200, timeout: float = 1.0):
         if self.ser and self.ser.is_open:
@@ -75,6 +78,7 @@ class SerialRadarClient:
     def apply_config(self, cfg: ScanConfig):
         # Buffer config; will be sent at end-of-sweep (when END arrives)
         self._pending_cfg = cfg
+        self._current_cfg = cfg
 
     def start_auto(self, enabled: bool = True):
         # Deprecated in this GUI revision
@@ -97,15 +101,17 @@ class SerialRadarClient:
             logging.debug(f"Serial raw: {raw}")
             if raw == "END":
                 self.sweep_queue.put(None)
-                if self._pending_cfg is not None:
-                    try:
-                        res = int(self._pending_cfg.resolution)
-                        ang = int(self._pending_cfg.angle)
-                        self.send_line(f"Resolution: {res}, Angle: {ang}")
-                    except Exception:
-                        pass
-                    finally:
-                        self._pending_cfg = None
+                # Always send a JSON config to allow next sweep to start
+                try:
+                    cfg = self._pending_cfg if self._pending_cfg is not None else self._current_cfg
+                    res = int(cfg.resolution)
+                    ang = int(cfg.angle)
+                    payload = {"Angle": ang, "Resolution": res}
+                    self.send_line(json.dumps(payload))
+                except Exception as e:
+                    logging.error(f"Failed to send config JSON: {e}")
+                finally:
+                    self._pending_cfg = None
                 continue
             try:
                 if raw.startswith("{"):
@@ -182,11 +188,6 @@ class RadarGUI:
         add_labeled(0, 2, "Angle (°):", ttk.Spinbox(cfg, from_=0, to=270, increment=1, textvariable=self.angle, width=8))
 
         ttk.Button(cfg, text="Apply", command=self._apply_cfg).grid(row=0, column=10, padx=6)
-
-        # Firmware control toggle and display throttle
-        ttk.Checkbutton(cfg, text="Send commands to firmware (optional)", variable=self.controls_enabled).grid(row=1, column=0, columnspan=4, sticky=tk.W, pady=(4, 0))
-        ttk.Label(cfg, text="Display sweeps/sec").grid(row=1, column=4, sticky=tk.W, padx=(20, 4))
-        ttk.Spinbox(cfg, from_=1, to=30, increment=1, textvariable=self.display_rate_hz, width=6).grid(row=1, column=5, sticky=tk.W)
 
         # Plot area
         plot_frame = ttk.Frame(self.root)
