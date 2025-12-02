@@ -30,17 +30,17 @@ void Radar::emitPoint(float angle, uint16_t distance) const{
     Serial.println(distance);
 }
 
-bool Radar::reciveData(){
+bool Radar::receiveData(){
     if (!Serial.available())
         return false;
 
-    String recivedString = Serial.readStringUntil('\n');
+    String receivedString = Serial.readStringUntil('\n');
     
-    if (recivedString.length() == 0)
+    if (receivedString.length() == 0)
         return false;
 
     StaticJsonDocument<200> doc;
-    DeserializationError error = deserializeJson(doc, recivedString);
+    DeserializationError error = deserializeJson(doc, receivedString);
 
     if (!error){
         _recivedInfo = doc["Command"].as<String>();
@@ -51,7 +51,7 @@ bool Radar::reciveData(){
 }
 
 void Radar::changeParameters(){
-    if(reciveData()){
+    if(receiveData()){
         if(_recivedInfo == "Resolution")      
             _motor.changeResolution(_recivedValue);
         else if (_recivedInfo == "Time")

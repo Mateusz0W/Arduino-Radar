@@ -20,6 +20,6 @@ class Radar{
         void init(const float maxSpeed, const float acceleration);
         void scanSweep(bool forward);
         void emitPoint(float angle, uint16_t distance) const;
-        bool reciveData();
+        bool receiveData();
         void changeParameters();
 };
