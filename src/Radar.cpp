@@ -28,30 +28,30 @@ void Radar::emitPoint(float angle, uint16_t distance) const{
     Serial.println();
 }
 
-bool Radar::reciveData(){
+bool Radar::receiveData(){
     if (!Serial.available())
         return false;
 
-    String recivedString = Serial.readStringUntil('\n');
+    String receivedString = Serial.readStringUntil('\n');
     
-    if (recivedString.length() == 0)
+    if (receivedString.length() == 0)
         return false;
 
     StaticJsonDocument<200> doc;
-    DeserializationError error = deserializeJson(doc, recivedString);
+    DeserializationError error = deserializeJson(doc, receivedString);
 
     if (!error){
-        _recivedAngle = doc["Angle"].as<float>();
-        _recivedResolution = doc["Resolution"].as<int>(); 
+        _receivedAngle = doc["Angle"].as<float>();
+        _receivedResolution = doc["Resolution"].as<int>(); 
     }
 
     return true;
 }
 
 void Radar::changeParameters(){
-    if(reciveData()){
-        setResolution(_recivedResolution);
-        setMaxAngle(_recivedAngle);
+    if(receiveData()){
+        setResolution(_receivedResolution);
+        setMaxAngle(_receivedAngle);
     }
 }
 

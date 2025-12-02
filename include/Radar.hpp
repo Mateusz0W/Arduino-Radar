@@ -9,8 +9,8 @@ class Radar{
         StepperMotor &_motor;
         Sensor &_sensor;
         int _sampleCount;
-        int _recivedResolution;
-        float _recivedAngle;
+        int _receivedResolution;
+        float _receivedAngle;
         int _measureTime;
         float _maxAngle;
         int _resolution;
@@ -25,7 +25,7 @@ class Radar{
         void init(const float maxSpeed, const float acceleration);
         void scanSweep(bool forward);
         void emitPoint(float angle, uint16_t distance) const;
-        bool reciveData();
+        bool receiveData();
         void changeParameters();
         void setMaxAngle(float angel);
         void setResolution(int resolution);
